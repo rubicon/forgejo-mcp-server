@@ -1,0 +1,30 @@
+name: Policy
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Branch naming (dev/<issue>-<slug>)
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          echo "head branch: $HEAD_REF"
+          echo "$HEAD_REF" | grep -Eq '^dev/[0-9]+-[a-z0-9.-]+$' || {
+            echo "Branch must match dev/<issue>-<slug>"; exit 1; }
+      - name: Semantic PR title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "title: $TITLE"
+          echo "$TITLE" | grep -Eq '^(feat|fix|chore|docs|test|ci|refactor)(\(.+\))?: .+' || {
+            echo "PR title must start with a semantic prefix (feat|fix|chore|docs|test|ci|refactor)"; exit 1; }
+      - name: Issue link in PR body
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          echo "$BODY" | grep -Eq '#[0-9]+' || {
+            echo "PR body must reference an issue (for example Closes #3)"; exit 1; }

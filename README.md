@@ -1,101 +1,84 @@
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/nsvk13-forgejo-mcp-server-badge.png)](https://mseep.ai/app/nsvk13-forgejo-mcp-server)
+# Forgejo MCP
 
-# Forgejo MCP Server
+A Model Context Protocol (MCP) server that gives Claude Code (and any MCP client) tools to interact with a Forgejo/Gitea instance over the REST API: repositories, issues, file contents, and **pull requests**.
 
-A Model Context Protocol (MCP) server that provides Claude Desktop with tools to interact with Forgejo repositories.
+This is a fork of [`nsvk13/forgejo-mcp-server`](https://github.com/nsvk13/forgejo-mcp-server) (GPL-3.0, pinned at commit `565396b`) with two changes:
 
-![Forgejo MCP Server](.github/img/image.png)
+1. **Pull-request tools added** — `list_pull_requests`, `get_pull_request`, `create_pull_request`.
+2. **Node-native build** — replaced the Bun build with `esbuild`, so it builds and runs on a stock Node install (no Bun required).
 
-## Features
+## Design: safe for unattended use
 
-- List repositories
-- Get repository information
-- List issues with filtering by state
-- Create new issues
-- Read file contents from repositories
-- List, view, and create pull requests
+This server is meant to run in autonomous/headless contexts (scheduled jobs, `claude -p`). Two deliberate choices keep it from ever hanging or doing damage:
 
-## Installation
+- **No self-gating prompts.** Tools never pause to ask for confirmation, so an unattended run can't block waiting for a human. Authorization is enforced once, by the API token's scopes.
+- **No destructive operations.** There is intentionally no merge, delete, force-push, or admin tool. The blast radius of a leaked or over-trusted token is capped at "create issues/PRs and read." Merges and deletes stay human-only, done interactively in the Forgejo UI or a separate interactive session.
+
+Pair this with a **least-privilege API token** (repo + issue + PR write only) so the token can't exceed what the tools expose.
+
+## Build
 
 ```bash
-git clone https://github.com/nsvk13/forgejo-mcp-server
-cd forgejo-mcp-server
 npm install
-npm run build
+npm run build      # → dist/index.js (single bundled file)
 ```
+
+## Available tools
+
+| Tool | Kind | Endpoint |
+|---|---|---|
+| `list_repositories` | read | `/user/repos` or `/users/{u}/repos` |
+| `get_repository` | read | `/repos/{owner}/{repo}` |
+| `get_file_content` | read | `/repos/{owner}/{repo}/contents/{path}` |
+| `list_issues` | read | `/repos/{owner}/{repo}/issues` |
+| `create_issue` | write | `POST /repos/{owner}/{repo}/issues` |
+| `list_pull_requests` | read | `/repos/{owner}/{repo}/pulls` |
+| `get_pull_request` | read | `/repos/{owner}/{repo}/pulls/{index}` |
+| `create_pull_request` | write | `POST /repos/{owner}/{repo}/pulls` |
+
+`create_pull_request` takes `owner`, `repo`, `title`, `head` (source branch), `base` (target branch), and optional `body`.
 
 ## Configuration
 
-### Environment Variables
+Two environment variables:
 
-Set the following environment variables:
+- `FORGEJO_BASE_URL` — your instance, e.g. `https://git.daxdavis.com`
+- `FORGEJO_TOKEN` — an API token scoped to repo + issue + PR write
 
-- `FORGEJO_BASE_URL`: Your Forgejo instance URL (e.g., `https://your-forgejo.com`)
-- `FORGEJO_TOKEN`: Your Forgejo API token
+### Claude Code (user scope)
 
-### Generating a Forgejo API Token
-
-1. Go to your Forgejo instance
-2. Navigate to Settings → Applications
-3. Generate a new token with appropriate permissions
-4. Copy the token for use in configuration
-
-### Claude Desktop Configuration
-
-Add the following to your Claude Desktop configuration file:
-
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+Register it once so every project can use it. In your user `settings.json`:
 
 ```json
 {
   "mcpServers": {
     "forgejo": {
       "command": "node",
-      "args": ["/absolute/path/to/forgejo-mcp-server/dist/index.js"],
+      "args": ["/absolute/path/to/forgejo-mcp/dist/index.js"],
       "env": {
-        "FORGEJO_BASE_URL": "https://your-forgejo-instance.com",
-        "FORGEJO_TOKEN": "your_api_token_here"
+        "FORGEJO_BASE_URL": "https://git.daxdavis.com",
+        "FORGEJO_TOKEN": "${FORGEJO_TOKEN}"
       }
     }
   }
 }
 ```
 
-Replace the path and credentials with your actual values.
+Prefer injecting `FORGEJO_TOKEN` from a secret manager rather than pasting it in plaintext. For unattended runs use a non-interactive source (e.g. a 1Password **service-account** token), since interactive biometric unlock would defeat headless operation.
 
-## Usage
+To run without per-call approval prompts, allowlist the server's tools in `settings.json`:
 
-After configuration, restart Claude Desktop. You can then use commands like:
-
-- "List my Forgejo repositories"
-- "Show issues in repository owner/repo-name"
-- "Create an issue in repository with title 'Bug report'"
-- "Show the contents of README.md from repository"
-
-## Available Tools
-
-- `list_repositories`: Get list of user repositories
-- `get_repository`: Get detailed repository information
-- `list_issues`: List issues with optional state filtering
-- `create_issue`: Create a new issue
-- `get_file_content`: Read file contents from repository
-- `list_pull_requests`: List pull requests with optional state filtering
-- `get_pull_request`: Get a single pull request by its number
-- `create_pull_request`: Open a new pull request from a head branch into a base branch
-
-## Development
-
-```bash
-# Build the project
-npm run build
-
-# Run in development mode
-npm run dev
+```json
+{ "permissions": { "allow": ["mcp__forgejo"] } }
 ```
+
+`mcp__forgejo` allows every tool the server exposes. Because the server has no destructive tools, allowing the whole server is safe and is what enables prompt-free unattended runs.
 
 ## Requirements
 
-- Node.js 18 or higher
-- TypeScript
-- Valid Forgejo instance with API access
+- Node 18+ (built/tested on Node 22)
+- A Forgejo/Gitea instance with API access
+
+## License
+
+GPL-3.0, inherited from the upstream project. See `LICENSE`.
