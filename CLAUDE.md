@@ -14,7 +14,9 @@ the issue with `Closes #N`) -> checks pass -> merge.**
 - No direct pushes to `main`. No force-pushes to `main`.
 - Trivial changes still go through a branch and a PR.
 - Semantic commit prefixes only: `feat` `fix` `chore` `docs` `test` `ci` `refactor`.
-- `origin` is Forgejo (canonical). `upstream` is the GitHub source; push there
+- `origin` is GitHub (`rubicon/forgejo-mcp-server`, canonical) via a
+  repo-specific override of the policy's Forgejo default; Forgejo is a read-only
+  mirror (see `FORK.md`). `upstream` is the third-party GitHub source; push there
   only for approved good-citizen upstream PRs (see `FORK.md`), and those must
   follow the Outbound PR Authorship Standard (no AI tells, no em-dashes, no
   emojis, no AI-authorship trailers).
